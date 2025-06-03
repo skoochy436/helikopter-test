@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sembol-Sayı Eşleştirme Testi</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    #pairsContainer {
+      display: grid;
+      gap: 20px;
+      justify-content: center;
+      align-items: center;
+      margin-top: 30px;
+    }
+    /* 4 eleman için 2x2 grid, 2 eleman için 2x1 grid */
+    #pairsContainer.four {
+      grid-template-columns: repeat(2, 100px);
+    }
+    #pairsContainer.two {
+      grid-template-columns: repeat(2, 120px);
+    }
+    .pair-card {
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 10px;
+      width: 100px;
+      height: 100px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.5rem;
+      background: #f9f9f9;
+    }
+    .pair-symbol {
+      font-size: 2.5rem;
+      margin-bottom: 5px;
+    }
+    #quizContainer {
+      margin-top: 30px;
+      display: none;
+    }
+    #quizSymbol {
+      font-size: 4rem;
+      margin-bottom: 15px;
+    }
+    #feedback {
+      margin-top: 10px;
+      font-size: 1.2rem;
+      height: 1.5em;
+    }
+    #startBtn, #nextBtn {
+      padding: 10px 20px;
+      font-size: 1rem;
+      border: none;
+      background-color: #007bff;
+      color: #fff;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #startBtn:hover, #nextBtn:hover {
+      background-color: #0056b3;
+    }
+    input[type="number"] {
+      width: 60px;
+      font-size: 1.2rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sembol-Sayı Eşleştirme Testi</h1>
+  <button id="startBtn" type="button">Teste Başla</button>
+
+  <!-- Eşleşmelerin gösterileceği alan -->
+  <div id="pairsContainer"></div>
+
+  <!-- Quiz kısmı -->
+  <div id="quizContainer">
+    <div id="quizSymbol"></div>
+    <div>
+      <input type="number" id="quizInput" placeholder="Sayı" min="10" max="99" />
+      <button id="submitBtn" type="button">Gönder</button>
+    </div>
+    <div id="feedback"></div>
+    <button id="nextBtn" type="button" style="display: none;">Sonraki</button>
+  </div>
+
+  <script>
+    // =============================
+    // 1. GLOBAL DEĞİŞKENLER & AYARLAR
+    // =============================
+    const startBtn = document.getElementById('startBtn');
+    const pairsContainer = document.getElementById('pairsContainer');
+    const quizContainer = document.getElementById('quizContainer');
+    const quizSymbolEl = document.getElementById('quizSymbol');
+    const quizInput = document.getElementById('quizInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const feedbackEl = document.getElementById('feedback');
+
+    // İlk faz için kullanılacak 8 sembol
+    const phase1Symbols = ['★', '❤', '▲', '■', '●', '♫', '☀', '☂'];
+    // İkinci faz için kullanılacak 4 sembol
+    const phase2Symbols = ['☻', '☯', '✈', '⚽'];
+
+    let phase1Mapping = {};  // { '★': 42, '❤': 87, ... }
+    let phase2Mapping = {};  // { '☻': 13, ... }
+
+    let quizQueue = [];      // Quiz aşamalarında kullanacağımız dizi
+    let currentQuizIndex = 0;
+    let currentPhase = 1;    // 1 veya 2
+
+    // =============================
+    // 2. YARDIMCI FONKSİYONLAR
+    // =============================
+
+    // Belirtilen semboller listesini, her sembol için benzersiz bir iki basamaklı sayı atayarak
+    // geriye { '★': 42, ... } şeklinde bir eşleştirme objesi döner.
+    function generateMapping(symbolList) {
+      const mapping = {};
+      const usedNumbers = new Set();
+      symbolList.forEach((sym) => {
+        let num;
+        do {
+          num = Math.floor(Math.random() * 90) + 10; // 10..99
+        } while (usedNumbers.has(num));
+        usedNumbers.add(num);
+        mapping[sym] = num;
+      });
+      return mapping;
+    }
+
+    // Eşleşmeleri grid içinde gösterir. 
+    // pairs: [['★', 42], ['❤', 87], ...]
+    // count: kaç çift (örneğin 4 veya 2)
+    function showPairs(pairs, count) {
+      pairsContainer.innerHTML = '';
+      pairsContainer.className = count === 4 ? 'four' : 'two';
+      pairs.forEach(([sym, num]) => {
+        const card = document.createElement('div');
+        card.className = 'pair-card';
+        const s = document.createElement('div');
+        s.className = 'pair-symbol';
+        s.textContent = sym;
+        const n = document.createElement('div');
+        n.textContent = num;
+        card.appendChild(s);
+        card.appendChild(n);
+        pairsContainer.appendChild(card);
+      });
+    }
+
+    // pairsContainer'ı temizler (gizler)
+    function clearPairs() {
+      pairsContainer.innerHTML = '';
+    }
+
+    // =============================
+    // 3. TEST AKIŞI (PHASE 1 + PHASE 2)
+    // =============================
+
+    function startTest() {
+      startBtn.style.display = 'none';
+      // 1. Faz eşleşme verilerini oluştur
+      phase1Mapping = generateMapping(phase1Symbols);
+      // 2. Faz eşleşme verilerini oluştur
+      phase2Mapping = generateMapping(phase2Symbols);
+
+      // FAZ 1: 4+4 gösterim → 3 soruluk quiz
+      const all1Pairs = Object.entries(phase1Mapping); // [['★',42], ...]
+      shuffleArray(all1Pairs);
+      const first4 = all1Pairs.slice(0, 4);
+      const next4 = all1Pairs.slice(4, 8);
+
+      // 1. faz quiz sırası oluştur (3 defa rastgele sembol)
+      quizQueue = [];
+      for (let i = 0; i < 3; i++) {
+        // 8 sembolden rastgele bir sembol seç ve sıraya ekle
+        const rndIdx = Math.floor(Math.random() * phase1Symbols.length);
+        quizQueue.push({
+          symbol: phase1Symbols[rndIdx],
+          answer: phase1Mapping[phase1Symbols[rndIdx]]
+        });
+      }
+      currentQuizIndex = 0;
+      currentPhase = 1;
+
+      // Aşama 1: İlk 4 eşleşmeyi 4 saniye göster
+      showPairs(first4, 4);
+      setTimeout(() => {
+        clearPairs();
+        // Aşama 2: Sonraki 4 eşleşmeyi 4 saniye göster
+        showPairs(next4, 4);
+        setTimeout(() => {
+          clearPairs();
+          // Aşama 3: Phase 1 quiz (3 soru)
+          startQuiz();
+        }, 4000);
+      }, 4000);
+    }
+
+    // Quiz kısmını başlatır veya bir sonraki soruya geçer
+    function startQuiz() {
+      quizContainer.style.display = 'block';
+      feedbackEl.textContent = '';
+      quizInput.value = '';
+      nextBtn.style.display = 'none';
+
+      const current = quizQueue[currentQuizIndex];
+      quizSymbolEl.textContent = current.symbol;
+    }
+
+    // Quizte "Gönder" tuşuna basıldığında çağrılır
+    function checkAnswer() {
+      const current = quizQueue[currentQuizIndex];
+      const userVal = parseInt(quizInput.value);
+      if (!userVal) {
+        feedbackEl.textContent = 'Lütfen geçerli bir sayı girin.';
+        return;
+      }
+      if (userVal === current.answer) {
+        feedbackEl.style.color = 'green';
+        feedbackEl.textContent = '✅ Doğru!';
+      } else {
+        feedbackEl.style.color = 'red';
+        feedbackEl.textContent = `❌ Yanlış. Doğru cevap: ${current.answer}`;
+      }
+      submitBtn.disabled = true;
+      nextBtn.style.display = 'inline-block';
+    }
+
+    // "Sonraki" tuşuna basıldığında çağrılır
+    function nextQuestion() {
+      currentQuizIndex++;
+      submitBtn.disabled = false;
+      feedbackEl.textContent = '';
+      quizInput.value = '';
+      nextBtn.style.display = 'none';
+
+      if (currentPhase === 1) {
+        if (currentQuizIndex < quizQueue.length) {
+          // Hâlâ Phase 1'deki quiz soruları devam ediyor
+          const nxt = quizQueue[currentQuizIndex];
+          quizSymbolEl.textContent = nxt.symbol;
+        } else {
+          // Phase 1 quiz bitti → Phase 2'ye geç
+          quizContainer.style.display = 'none';
+          runPhase2();
+        }
+      } else {
+        // Phase 2 quiz aşamasındayız
+        if (currentQuizIndex < quizQueue.length) {
+          const nxt = quizQueue[currentQuizIndex];
+          quizSymbolEl.textContent = nxt.symbol;
+        } else {
+          // Phase 2 quiz bitti → TEST TAMAMLANDI
+          quizContainer.style.display = 'none';
+          feedbackEl.textContent = '';
+          quizSymbolEl.textContent = '';
+          alert('Tüm test tamamlandı!');
+          startBtn.textContent = 'Tekrar Dene';
+          startBtn.style.display = 'inline-block';
+        }
+      }
+    }
+
+    // Phase 2 akışını başlatır
+    function runPhase2() {
+      // 2. Faz eşleşmeleri: 2+2 gösterim → 2 soruluk quiz
+      const all2Pairs = Object.entries(phase2Mapping);
+      shuffleArray(all2Pairs);
+      const first2 = all2Pairs.slice(0, 2);
+      const next2 = all2Pairs.slice(2, 4);
+
+      // Phase 2 quiz sırası (2 defa rastgele seçilmiş sembol)
+      quizQueue = [];
+      for (let i = 0; i < 2; i++) {
+        const rndIdx = Math.floor(Math.random() * phase2Symbols.length);
+        quizQueue.push({
+          symbol: phase2Symbols[rndIdx],
+          answer: phase2Mapping[phase2Symbols[rndIdx]]
+        });
+      }
+      currentQuizIndex = 0;
+      currentPhase = 2;
+
+      // Aşama 1: İlk 2 eşleşmeyi 4 saniye göster
+      showPairs(first2, 2);
+      setTimeout(() => {
+        clearPairs();
+        // Aşama 2: Sonraki 2 eşleşmeyi 4 saniye göster
+        showPairs(next2, 2);
+        setTimeout(() => {
+          clearPairs();
+          // Aşama 3: Phase 2 quiz (2 soru)
+          startQuiz();
+        }, 4000);
+      }, 4000);
+    }
+
+    // Dizi öğelerini karıştırmak için basit Fisher-Yates shuffle
+    function shuffleArray(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    // =============================
+    // 4. EVENT BAĞLANTILARI
+    // =============================
+    startBtn.addEventListener('click', startTest);
+    submitBtn.addEventListener('click', checkAnswer);
+    nextBtn.addEventListener('click', nextQuestion);
+  </script>
+</body>
+</html>

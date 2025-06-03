@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yönlü Nokta Hatırlama Testi</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 20px; }
+    .card { border: 2px solid #000; padding: 10px; font-size: 1.5rem; height: 120px; display: flex; align-items: center; justify-content: center; flex-direction: row; gap: 5px; }
+    .arrow { font-size: 3rem; margin-right: 10px; font-weight: bold; }
+    .dot-area { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); width: 60px; height: 60px; gap: 2px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; background-color: black; opacity: 0; }
+    .dot.visible { opacity: 1; }
+    .hidden { visibility: hidden; }
+    #prompt, #question, #inputArea, #result { margin-top: 30px; font-size: 1.2rem; }
+    #prompt { font-size: 2rem; height: 100px; display: flex; align-items: center; justify-content: center; }
+  </style>
+</head>
+<body>
+  <h1>Yönlü Nokta Hatırlama Testi</h1>
+  <button id="startBtn" type="button">Teste Başla</button>
+  <div id="prompt"></div>
+  <div class="grid" id="grid"></div>
+  <div id="question" style="display:none;"></div>
+  <div id="inputArea" style="display:none;">
+    <input type="text" id="userInput" placeholder="Örn: 3,1,2,5" />
+    <button onclick="submitAnswer()">Gönder</button>
+  </div>
+  <div id="result"></div>
+
+  <script>
+    const directions = ['→', '←', '↑', '↓'];
+    const colors = ['blue', 'red'];
+    let data = [];
+    let correctAnswer = [];
+    let targetDir = '';
+    let targetColor = '';
+
+    function startTest() {
+      data = [];
+      correctAnswer = [];
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+
+      targetDir = directions[Math.floor(Math.random() * directions.length)];
+      targetColor = colors[Math.floor(Math.random() * colors.length)];
+      document.getElementById('prompt').innerHTML = `<span style="font-size: 4rem; font-weight: bold; color: ${targetColor};">${targetDir}</span>`;
+      document.getElementById('question').textContent = `${targetColor} ${targetDir} ok olan kutulardaki nokta sayılarını sırayla yaz (örneğin: 3,1,2,4):`;
+
+      setTimeout(() => {
+        generateCards();
+      }, 2000);
+    }
+
+    function generateCards() {
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+
+      const fixedTargetCards = [];
+      for (let i = 0; i < 4; i++) {
+        fixedTargetCards.push({ direction: targetDir, color: targetColor });
+      }
+
+      while (fixedTargetCards.length < 16) {
+        const dir = directions[Math.floor(Math.random() * 4)];
+        const color = colors[Math.floor(Math.random() * 2)];
+        if (dir !== targetDir || color !== targetColor) {
+          fixedTargetCards.push({ direction: dir, color });
+        }
+      }
+
+      const allCards = fixedTargetCards.sort(() => Math.random() - 0.5);
+
+      for (let i = 0; i < 16; i++) {
+        const { direction: dir, color } = allCards[i];
+        const dot = Math.floor(Math.random() * 9) + 1;
+        data.push({ direction: dir, dot, color });
+
+        const div = document.createElement('div');
+        div.className = 'card';
+
+        const arrow = document.createElement('div');
+        arrow.className = 'arrow';
+        arrow.textContent = dir;
+        arrow.style.color = color;
+
+        const dotArea = document.createElement('div');
+        dotArea.className = 'dot-area';
+
+        const indexes = [...Array(9).keys()].sort(() => Math.random() - 0.5);
+        for (let j = 0; j < 9; j++) {
+          const dotEl = document.createElement('div');
+          dotEl.className = 'dot';
+          if (j < dot) {
+            const gridIndex = indexes[j];
+            dotEl.style.gridRowStart = Math.floor(gridIndex / 3) + 1;
+            dotEl.style.gridColumnStart = (gridIndex % 3) + 1;
+            dotEl.classList.add('visible');
+          }
+          dotArea.appendChild(dotEl);
+        }
+
+        div.appendChild(arrow);
+        div.appendChild(dotArea);
+        grid.appendChild(div);
+
+        if (dir === targetDir && color === targetColor) {
+          correctAnswer.push(dot);
+        }
+      }
+
+      // Kartları 6 saniye sonra gizleyecek şekilde ayarlandı:
+      setTimeout(() => {
+        document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
+        document.getElementById('question').style.display = 'block';
+        document.getElementById('inputArea').style.display = 'block';
+      }, 6000);
+    }
+
+    function submitAnswer() {
+      const input = document.getElementById('userInput').value;
+      const userDots = input.split(',').map(x => parseInt(x.trim())).filter(n => !isNaN(n));
+      const result = document.getElementById('result');
+
+      if (JSON.stringify(userDots) === JSON.stringify(correctAnswer)) {
+        result.textContent = '✅ Doğru!';
+      } else {
+        result.textContent = `❌ Yanlış. Doğru sıra: ${correctAnswer.join(', ')}`;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('startBtn').addEventListener('click', startTest);
+    });
+  </script>
+</body>
+</html>
