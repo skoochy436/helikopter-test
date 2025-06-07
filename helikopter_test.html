@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Helikopter Yön Testi - Sesli ve Görsel Geliştirmeler</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+    #canvasContainer { display: inline-block; position: relative; }
+    canvas { background-color: #f2f2f2; border: 2px solid #444; border-radius: 50%; }
+    #controls { margin-top: 15px; }
+    #feedback { margin-top: 10px; font-weight: bold; min-height: 24px; }
+    #timer, #score { font-size: 18px; margin: 10px; }
+    button { font-size: 14px; padding: 8px 12px; margin: 4px; }
+    #answerButtons.grid { display: grid; grid-template-columns: repeat(4, auto); grid-gap: 8px; justify-content: center; margin: 10px auto; }
+    #answerButtons button { width: 60px; }
+    #historyList { text-align: left; max-width: 400px; margin: 20px auto; display: none; }
+    #historyList h4 { margin-bottom: 5px; }
+    #historyList ul { list-style: none; padding: 0; }
+    #historyList li { margin-bottom: 3px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h2>Helikopter Yön Testi</h2>
+  <div id="timer">Kalan Süre: 01:30</div>
+  <div id="score">Puan: 0</div>
+  <div id="statsPanel" style="margin-top:10px; display:none;">
+    <h3>📊 Test İstatistikleri</h3>
+    <p id="totalQuestions">Toplam Soru: 0</p>
+    <p id="correctAnswers">Doğru Sayısı: 0</p>
+    <p id="wrongAnswers">Yanlış Sayısı: 0</p>
+    <p id="accuracyRate">Doğruluk Oranı: 0%</p>
+  </div>
+  <button id="saveHistoryBtn" style="display:none;">Geçmişi Kaydet</button>
+  <div id="historyList">
+    <h4>Geçmiş Sonuçlar</h4>
+    <ul id="historyUl"></ul>
+  </div>
+  <div id="canvasContainer">
+    <canvas id="compassCanvas" width="400" height="400"></canvas>
+  </div>
+  <div id="controls">
+    <label for="numLabelsSelect">Gösterilecek yön sayısı:</label>
+    <select id="numLabelsSelect">
+      <option value="2">2 yön</option>
+      <option value="3">3 yön</option>
+      <option value="random">Rastgele</option>
+    </select>
+    <label for="directionTypeSelect">Yön türü:</label>
+    <select id="directionTypeSelect">
+      <option value="all">Tüm Yönler</option>
+      <option value="arayon">Arayönler</option>
+    </select>
+    <br><br>
+    <button id="startBtn">Teste Başla</button>
+    <br><br>
+    <div id="answerButtons" class="grid" style="display:none;">
+      <button data-dir="K">K</button>
+      <button data-dir="D">D</button>
+      <button data-dir="G">G</button>
+      <button data-dir="B">B</button>
+      <button data-dir="KD">KD</button>
+      <button data-dir="GD">GD</button>
+      <button data-dir="GB">GB</button>
+      <button data-dir="KB">KB</button>
+    </div>
+    <div id="feedback"></div>
+    <button id="reviewBtn" style="display:none;">Yanlışları Tekrar Et</button>
+    <button id="backToTestBtn" style="display:none;">Ana Teste Dön</button>
+    <button id="continueBtn" style="display:none;">Devam Et</button>
+  </div>
+  <script>
+    function playTone(freq) {
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      osc.frequency.value = freq;
+      osc.connect(ctx.destination);
+      osc.start();
+      setTimeout(() => osc.stop(), 200);
+    }
+    const canvas = document.getElementById('compassCanvas');
+    const ctx = canvas.getContext('2d');
+    const cx = canvas.width/2, cy = canvas.height/2, radius = 180;
+    const startBtn = document.getElementById('startBtn');
+    const answerButtons = document.getElementById('answerButtons');
+    const feedbackDiv = document.getElementById('feedback');
+    const timerDiv = document.getElementById('timer');
+    const scoreDiv = document.getElementById('score');
+    const statsEl = document.getElementById('statsPanel');
+    const saveHistoryBtn = document.getElementById('saveHistoryBtn');
+    const historyList = document.getElementById('historyList');
+    const historyUl = document.getElementById('historyUl');
+    const reviewBtn = document.getElementById('reviewBtn');
+    const backToTestBtn = document.getElementById('backToTestBtn');
+    const continueBtn = document.getElementById('continueBtn');
+    const dirData = [
+      {key:'K', angle:0}, {key:'KD', angle:45}, {key:'D', angle:90}, {key:'GD', angle:135},
+      {key:'G', angle:180}, {key:'GB', angle:225}, {key:'B', angle:270}, {key:'KB', angle:315}
+    ];
+    let correctDirection, visibleLabels = [], angleOffset = 0;
+    let totalQuestions=0, correctAnswers=0, wrongAnswers=0, score=0;
+    let wrongAttempts = [], reviewMode=false, reviewIndex=0;
+    let timeLeft=90, timerInterval=null, sessionActive=false;
+    function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+    function sample(arr,n){let c=arr.slice(),r=[];for(let i=0;i<n;i++){let j=randInt(0,c.length-1);r.push(c.splice(j,1)[0]);}return r;}
+    function drawCircle(){ctx.clearRect(0,0,400,400);ctx.beginPath();ctx.arc(cx,cy,radius,0,2*Math.PI);ctx.fillStyle='#e8e8e8';ctx.fill();ctx.strokeStyle='#444';ctx.lineWidth=2;ctx.stroke();}
+    function drawLabels(){ctx.fillStyle='#222';ctx.font='bold 16px Arial';ctx.textAlign='center';ctx.textBaseline='middle';visibleLabels.forEach(key=>{const base=dirData.find(d=>d.key===key).angle;const rad=(base+angleOffset-90)*Math.PI/180;ctx.fillText(key,cx+Math.cos(rad)*(radius-30),cy+Math.sin(rad)*(radius-30));});}
+    function drawHeli(){ctx.save();ctx.translate(cx,cy);const base=dirData.find(d=>d.key===correctDirection).angle;ctx.rotate((base+angleOffset)*Math.PI/180);ctx.fillStyle='#666';ctx.fillRect(-15,-60,30,90);ctx.beginPath();ctx.moveTo(0,-70);ctx.lineTo(-12,-45);ctx.lineTo(12,-45);ctx.closePath();ctx.fillStyle='#333';ctx.fill();ctx.fillStyle='#888';ctx.fillRect(-5,30,10,60);ctx.fillRect(-50,0,100,6);ctx.restore();}
+    function drawCompass(){visibleLabels=[];angleOffset=randInt(0,7)*45;let num=document.getElementById('numLabelsSelect').value;num=(num==='random'? (Math.random()<0.5?2:3):parseInt(num));let type=document.getElementById('directionTypeSelect').value;const pool=(type==='arayon'?dirData.filter(d=>d.key.length===2):dirData);visibleLabels=sample(pool.map(d=>d.key),num);const avail=dirData.map(d=>d.key).filter(k=>!visibleLabels.includes(k));correctDirection=avail[randInt(0,avail.length-1)];drawCircle();drawLabels();drawHeli();answerButtons.style.display='none';setTimeout(()=>{
+        drawCircle(); drawHeli();
+        answerButtons.style.display='grid';
+      },2600);}    
+    function updateTimer(){const m=String(Math.floor(timeLeft/60)).padStart(2,'0');const s=String(timeLeft%60).padStart(2,'0');timerDiv.textContent=`Kalan Süre: ${m}:${s}`;if(timeLeft<=0){clearInterval(timerInterval);sessionActive=false;answerButtons.style.display='none';feedbackDiv.textContent=`⏰ Süre doldu! Puanınız: ${score}`;document.getElementById('totalQuestions').textContent=`Toplam Soru: ${totalQuestions}`;document.getElementById('correctAnswers').textContent=`Doğru Sayısı: ${correctAnswers}`;document.getElementById('wrongAnswers').textContent=`Yanlış Sayısı: ${wrongAnswers}`;const acc=totalQuestions?((correctAnswers/totalQuestions)*100).toFixed(1):0;document.getElementById('accuracyRate').textContent=`Doğruluk Oranı: ${acc}%`;statsEl.style.display='block';if(wrongAttempts.length)reviewBtn.style.display='inline-block';saveHistoryBtn.style.display='inline-block';}timeLeft--;}    
+    startBtn.addEventListener('click',()=>{if(!sessionActive){sessionActive=true;score=0;totalQuestions=0;correctAnswers=0;wrongAnswers=0;wrongAttempts=[];reviewMode=false;reviewIndex=0;timeLeft=90;scoreDiv.textContent=`Puan: ${score}`;feedbackDiv.textContent='';statsEl.style.display='none';reviewBtn.style.display='none';saveHistoryBtn.style.display='none';historyList.style.display='none';timerInterval=setInterval(updateTimer,1000);drawCompass();}});
+    answerButtons.querySelectorAll('button').forEach(btn=>{btn.addEventListener('click',()=>{if(!sessionActive&&!reviewMode)return;const ans=btn.dataset.dir;const isReview=reviewMode; if(isReview){feedbackDiv.textContent=ans===correctDirection?'✅ Doğru!':`❌ Yanlış. Doğru: ${correctDirection}`;playTone(ans===correctDirection?880:220);setTimeout(()=>{reviewIndex++;if(reviewIndex<wrongAttempts.length){feedbackDiv.textContent='';loadReviewQuestion();}else{feedbackDiv.textContent='Tüm yanlışlar tekrarlandı.';reviewMode=false;backToTestBtn.style.display='none';}},1500);return;}totalQuestions++;const correct=ans===correctDirection;if(correct){score++;correctAnswers++;feedbackDiv.textContent=`✅ Doğru! Puan: ${score}`;playTone(880);drawCompass();}else{score--;wrongAnswers++;feedbackDiv.textContent=`❌ Yanlış. Doğru: ${correctDirection}. Puan: ${score}`;playTone(220);wrongAttempts.push({visibleLabels:[...visibleLabels],correct:correctDirection,angleOffset});drawCircle();drawLabels();drawHeli();answerButtons.style.display='none';continueBtn.style.display='inline-block';}scoreDiv.textContent=`Puan: ${score}`;});});
+    continueBtn.addEventListener('click',()=>{continueBtn.style.display='none';feedbackDiv.textContent='';drawCompass();});
+    reviewBtn.addEventListener('click',()=>{if(!wrongAttempts.length)return;reviewMode=true;reviewIndex=0;scoreDiv.textContent='Tekrar Modu';reviewBtn.style.display='none';backToTestBtn.style.display='inline-block';loadReviewQuestion();});
+    backToTestBtn.addEventListener('click',()=>{reviewMode=false;backToTestBtn.style.display='none';scoreDiv.textContent=`Puan: ${score}`;drawCompass();});
+    function loadReviewQuestion(){const obj=wrongAttempts[reviewIndex];visibleLabels=obj.visibleLabels;correctDirection=obj.correct;angleOffset=obj.angleOffset;drawCircle();drawLabels();drawHeli();answerButtons.style.display='none';setTimeout(()=>{drawCircle();drawHeli();answerButtons.style.display='grid';},2600);}    
+    saveHistoryBtn.addEventListener('click',()=>{const acc=totalQuestions?((correctAnswers/totalQuestions)*100).toFixed(1):0;const entry={date:new Date().toLocaleString('tr-TR'),total:totalQuestions,correct:correctAnswers,wrong:wrongAnswers,accuracy:acc};const hist=JSON.parse(localStorage.getItem('helicopterHistory')||'[]');hist.push(entry);localStorage.setItem('helicopterHistory',JSON.stringify(hist));renderHistory();alert('Kaydedildi');});
+    function renderHistory(){const hist=JSON.parse(localStorage.getItem('helicopterHistory')||'[]');historyUl.innerHTML='';hist.slice(-10).reverse().forEach(e=>{const li=document.createElement('li');li.textContent=`${e.date} - Toplam:${e.total}, Doğru:${e.correct}, Yanlış:${e.wrong}, Oran:${e.accuracy}%`;historyUl.append(li);} );historyList.style.display=hist.length?'block':'none';}
+    window.addEventListener('load',renderHistory);
+  </script>
+</body>
+</html>
