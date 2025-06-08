@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sembol-Sayı Eşleştirme Testi - Gelişmiş</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+    h1 { margin-bottom: 10px; }
+    #params { margin-bottom: 20px; }
+    #pairsContainer { display: grid; gap: 20px; justify-content: center; align-items: center; margin-top: 20px; }
+    #pairsContainer.four { grid-template-columns: repeat(2, 100px); }
+    #pairsContainer.two { grid-template-columns: repeat(2, 120px); }
+    .pair-card { border: 2px solid #333; border-radius: 8px; padding: 10px; width: 100px; height: 100px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 1.5rem; background: #f9f9f9; }
+    .pair-symbol { font-size: 2.5rem; margin-bottom: 5px; }
+    #quizContainer { margin-top: 30px; display: none; }
+    #quizSymbol { font-size: 4rem; margin-bottom: 15px; }
+    #feedback { margin-top: 10px; font-size: 1.2rem; height: 1.5em; }
+    #summary { margin-top: 20px; font-size: 1.2rem; }
+    #finalAll { margin-top: 20px; display: none; grid-template-columns: repeat(4, 100px); gap: 15px; justify-content: center; }
+    #review { margin-top: 10px; display: none; }
+    #startBtn, #nextBtn, #reviewBtn { margin: 5px; padding: 10px 20px; font-size: 1rem; border: none; background-color: #007bff; color: #fff; border-radius: 5px; cursor: pointer; }
+    #startBtn:hover, #nextBtn:hover, #reviewBtn:hover { background-color: #0056b3; }
+    input[type="number"], input[type="text"] { width: 60px; font-size: 1.2rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Sembol-Sayı Eşleştirme Testi</h1>
+  <div id="params">
+    <label>Gösterim Süresi (ms): <input type="number" id="displayTimeInput" min="1000" max="10000" step="500" value="4000" /></label>
+    <button id="startBtn" type="button">Teste Başla</button>
+  </div>
+  <div id="pairsContainer"></div>
+  <div id="quizContainer">
+    <div id="quizSymbol"></div>
+    <div>
+      <input type="number" id="quizInput" placeholder="Sayı" min="10" max="99" />
+      <button id="submitBtn" type="button">Gönder</button>
+      <button id="nextBtn" type="button" style="display:none;">Sonraki</button>
+    </div>
+    <div id="feedback"></div>
+  </div>
+  <div id="summary"></div>
+  <div id="finalAll"></div>
+  <div id="review"></div>
+  <script>
+    const startBtn = document.getElementById('startBtn'), displayTimeInput = document.getElementById('displayTimeInput');
+    const pairsContainer = document.getElementById('pairsContainer'), quizContainer = document.getElementById('quizContainer');
+    const quizSymbolEl = document.getElementById('quizSymbol'), quizInput = document.getElementById('quizInput');
+    const submitBtn = document.getElementById('submitBtn'), nextBtn = document.getElementById('nextBtn');
+    const feedbackEl = document.getElementById('feedback'), summaryEl = document.getElementById('summary');
+    const finalAllEl = document.getElementById('finalAll'), reviewEl = document.getElementById('review');
+
+    const phase1Symbols = ['★','❤','▲','■','●','♫','☀','☂'];
+    const phase2Symbols = ['☻','☯','✈','⚽'];
+    let phase1Mapping={}, phase2Mapping={}, quizQueue=[], currentQuizIndex=0, currentPhase=1;
+    let correctCount=0, wrongCount=0, wrongAnswers=[];
+
+    function shuffleArray(arr){ for(let i=arr.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}}    
+    function sample(arr,n){ let c=arr.slice(); shuffleArray(c); return c.slice(0,n);}    
+    function generateMapping(list){ let map={}, used=new Set(); list.forEach(sym=>{let num; do{num=Math.floor(Math.random()*90)+10;}while(used.has(num)); used.add(num); map[sym]=num;}); return map;}    
+    function showPairs(pairs,count){ pairsContainer.innerHTML=''; pairsContainer.className= count===4?'four':'two'; pairs.forEach(([s,n])=>{ let card=document.createElement('div');card.className='pair-card'; card.innerHTML=`<div class='pair-symbol'>${s}</div><div>${n}</div>`; pairsContainer.appendChild(card);}); }
+    function clearPairs(){ pairsContainer.innerHTML=''; }
+
+    function startTest(){ summaryEl.textContent=''; finalAllEl.style.display='none'; reviewEl.style.display='none'; wrongAnswers=[]; correctCount=0; wrongCount=0;
+      const displayTime=+displayTimeInput.value;
+      phase1Mapping=generateMapping(phase1Symbols);
+      phase2Mapping=generateMapping(phase2Symbols);
+
+      // Phase1
+      let all1=Object.entries(phase1Mapping); shuffleArray(all1);
+      let f1=all1.slice(0,4), s1=all1.slice(4,8);
+      const q1=sample(phase1Symbols,3);
+      quizQueue=q1.map(sym=>({symbol:sym,answer:phase1Mapping[sym]})); currentQuizIndex=0; currentPhase=1;
+      showPairs(f1,4);
+      setTimeout(()=>{ clearPairs(); showPairs(s1,4);
+        setTimeout(()=>{ clearPairs(); startQuiz(); }, displayTime);
+      }, displayTime);
+    }
+
+    function startQuiz(){ quizContainer.style.display='block'; feedbackEl.textContent=''; quizInput.value=''; nextBtn.style.display='none'; submitBtn.disabled=false;
+      quizSymbolEl.textContent=quizQueue[currentQuizIndex].symbol;
+    }
+
+    function checkAnswer(){ let current=quizQueue[currentQuizIndex]; let val=parseInt(quizInput.value);
+      if(!val){feedbackEl.textContent='Lütfen sayı girin.'; return;}      
+      if(val===current.answer){ correctCount++; feedbackEl.style.color='green'; feedbackEl.textContent='✅ Doğru!'; }
+      else{ wrongCount++; feedbackEl.style.color='red'; feedbackEl.textContent=`❌ Yanlış. Doğru: ${current.answer}`;
+        wrongAnswers.push({symbol:current.symbol, correct:current.answer, you:val}); }
+      submitBtn.disabled=true; nextBtn.style.display='inline-block';
+    }
+
+    function nextQuestion(){ currentQuizIndex++; feedbackEl.textContent=''; quizInput.value=''; nextBtn.style.display='none'; submitBtn.disabled=false;
+      if(currentPhase===1){ if(currentQuizIndex<quizQueue.length){ quizSymbolEl.textContent=quizQueue[currentQuizIndex].symbol; } else { quizContainer.style.display='none'; runPhase2(); }}
+      else { if(currentQuizIndex<quizQueue.length){ quizSymbolEl.textContent=quizQueue[currentQuizIndex].symbol; } else { quizContainer.style.display='none'; showSummary(); }} }
+
+    function runPhase2(){ const displayTime=+displayTimeInput.value;
+      let all2=Object.entries(phase2Mapping); shuffleArray(all2);
+      let f2=all2.slice(0,2), s2=all2.slice(2,4);
+      quizQueue=[...f2,...s2].map(([s,n])=>({symbol:s,answer:n})); shuffleArray(quizQueue);
+      currentQuizIndex=0; currentPhase=2;
+      showPairs(f2,2);
+      setTimeout(()=>{ clearPairs(); showPairs(s2,2);
+        setTimeout(()=>{ clearPairs(); startQuiz(); }, displayTime);
+      }, displayTime);
+    }
+
+    function showSummary(){ let total=correctCount+wrongCount;
+      summaryEl.innerHTML=`Test tamamlandı!<br>Doğru: ${correctCount}/${total} (${((correctCount/total)*100).toFixed(0)}%)`;
+      const allPairs = [...Object.entries(phase1Mapping), ...Object.entries(phase2Mapping)];
+      finalAllEl.style.display = 'grid';
+      finalAllEl.innerHTML = '<h3>Tüm Sembol-Sayı Eşleşmeleri</h3>' + allPairs.map(([s,n]) => 
+        `<div class="pair-card"><div class="pair-symbol">${s}</div><div>${n}</div></div>`
+      ).join('');
+      if(wrongAnswers.length){ reviewEl.style.display='block'; reviewEl.innerHTML='<h3>Yanlışlar</h3>'+wrongAnswers.map(w=>`<div>${w.symbol}: doğru ${w.correct}, sen ${w.you}</div>`).join(''); }
+    }
+
+    startBtn.addEventListener('click', startTest);
+    submitBtn.addEventListener('click', checkAnswer);
+    nextBtn.addEventListener('click', nextQuestion);
+  </script>
+</body>
+</html>
