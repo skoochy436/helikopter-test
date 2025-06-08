@@ -21,6 +21,10 @@
 </head>
 <body>
   <h2>Helikopter Yön Testi</h2>
+  <div>
+    <label for="initialDelayInput">Başlangıç Gecikmesi (ms):</label>
+    <input type="number" id="initialDelayInput" value="2600" min="0" step="100">
+  </div>
   <div id="timer">Kalan Süre: 01:30</div>
   <div id="score">Puan: 0</div>
   <div id="statsPanel" style="margin-top:10px; display:none;">
@@ -29,6 +33,7 @@
     <p id="correctAnswers">Doğru Sayısı: 0</p>
     <p id="wrongAnswers">Yanlış Sayısı: 0</p>
     <p id="accuracyRate">Doğruluk Oranı: 0%</p>
+    <p id="avgTime">Ortalama Tepki Süresi: 0 ms</p>
   </div>
   <button id="saveHistoryBtn" style="display:none;">Geçmişi Kaydet</button>
   <div id="historyList">
@@ -100,25 +105,165 @@
     let totalQuestions=0, correctAnswers=0, wrongAnswers=0, score=0;
     let wrongAttempts = [], reviewMode=false, reviewIndex=0;
     let timeLeft=90, timerInterval=null, sessionActive=false;
+    let questionStartTime = 0, reactionTimes = [];
     function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
     function sample(arr,n){let c=arr.slice(),r=[];for(let i=0;i<n;i++){let j=randInt(0,c.length-1);r.push(c.splice(j,1)[0]);}return r;}
     function drawCircle(){ctx.clearRect(0,0,400,400);ctx.beginPath();ctx.arc(cx,cy,radius,0,2*Math.PI);ctx.fillStyle='#e8e8e8';ctx.fill();ctx.strokeStyle='#444';ctx.lineWidth=2;ctx.stroke();}
     function drawLabels(){ctx.fillStyle='#222';ctx.font='bold 16px Arial';ctx.textAlign='center';ctx.textBaseline='middle';visibleLabels.forEach(key=>{const base=dirData.find(d=>d.key===key).angle;const rad=(base+angleOffset-90)*Math.PI/180;ctx.fillText(key,cx+Math.cos(rad)*(radius-30),cy+Math.sin(rad)*(radius-30));});}
     function drawHeli(){ctx.save();ctx.translate(cx,cy);const base=dirData.find(d=>d.key===correctDirection).angle;ctx.rotate((base+angleOffset)*Math.PI/180);ctx.fillStyle='#666';ctx.fillRect(-15,-60,30,90);ctx.beginPath();ctx.moveTo(0,-70);ctx.lineTo(-12,-45);ctx.lineTo(12,-45);ctx.closePath();ctx.fillStyle='#333';ctx.fill();ctx.fillStyle='#888';ctx.fillRect(-5,30,10,60);ctx.fillRect(-50,0,100,6);ctx.restore();}
-    function drawCompass(){visibleLabels=[];angleOffset=randInt(0,7)*45;let num=document.getElementById('numLabelsSelect').value;num=(num==='random'? (Math.random()<0.5?2:3):parseInt(num));let type=document.getElementById('directionTypeSelect').value;const pool=(type==='arayon'?dirData.filter(d=>d.key.length===2):dirData);visibleLabels=sample(pool.map(d=>d.key),num);const avail=dirData.map(d=>d.key).filter(k=>!visibleLabels.includes(k));correctDirection=avail[randInt(0,avail.length-1)];drawCircle();drawLabels();drawHeli();answerButtons.style.display='none';setTimeout(()=>{
+    function drawCompass(){
+      visibleLabels=[];
+      angleOffset = randInt(0,7)*45;
+      let num = document.getElementById('numLabelsSelect').value;
+      num = (num==='random'? (Math.random()<0.5?2:3):parseInt(num));
+      let type = document.getElementById('directionTypeSelect').value;
+      const pool = (type==='arayon'? dirData.filter(d=>d.key.length===2): dirData);
+      visibleLabels = sample(pool.map(d=>d.key), num);
+      const avail = dirData.map(d=>d.key).filter(k=>!visibleLabels.includes(k));
+      correctDirection = avail[randInt(0,avail.length-1)];
+      drawCircle(); drawLabels(); drawHeli();
+      answerButtons.style.display = 'none';
+      const delay = parseInt(document.getElementById('initialDelayInput').value) || 2600;
+      setTimeout(()=>{
         drawCircle(); drawHeli();
-        answerButtons.style.display='grid';
-      },2600);}    
-    function updateTimer(){const m=String(Math.floor(timeLeft/60)).padStart(2,'0');const s=String(timeLeft%60).padStart(2,'0');timerDiv.textContent=`Kalan Süre: ${m}:${s}`;if(timeLeft<=0){clearInterval(timerInterval);sessionActive=false;answerButtons.style.display='none';feedbackDiv.textContent=`⏰ Süre doldu! Puanınız: ${score}`;document.getElementById('totalQuestions').textContent=`Toplam Soru: ${totalQuestions}`;document.getElementById('correctAnswers').textContent=`Doğru Sayısı: ${correctAnswers}`;document.getElementById('wrongAnswers').textContent=`Yanlış Sayısı: ${wrongAnswers}`;const acc=totalQuestions?((correctAnswers/totalQuestions)*100).toFixed(1):0;document.getElementById('accuracyRate').textContent=`Doğruluk Oranı: ${acc}%`;statsEl.style.display='block';if(wrongAttempts.length)reviewBtn.style.display='inline-block';saveHistoryBtn.style.display='inline-block';}timeLeft--;}    
-    startBtn.addEventListener('click',()=>{if(!sessionActive){sessionActive=true;score=0;totalQuestions=0;correctAnswers=0;wrongAnswers=0;wrongAttempts=[];reviewMode=false;reviewIndex=0;timeLeft=90;scoreDiv.textContent=`Puan: ${score}`;feedbackDiv.textContent='';statsEl.style.display='none';reviewBtn.style.display='none';saveHistoryBtn.style.display='none';historyList.style.display='none';timerInterval=setInterval(updateTimer,1000);drawCompass();}});
-    answerButtons.querySelectorAll('button').forEach(btn=>{btn.addEventListener('click',()=>{if(!sessionActive&&!reviewMode)return;const ans=btn.dataset.dir;const isReview=reviewMode; if(isReview){feedbackDiv.textContent=ans===correctDirection?'✅ Doğru!':`❌ Yanlış. Doğru: ${correctDirection}`;playTone(ans===correctDirection?880:220);setTimeout(()=>{reviewIndex++;if(reviewIndex<wrongAttempts.length){feedbackDiv.textContent='';loadReviewQuestion();}else{feedbackDiv.textContent='Tüm yanlışlar tekrarlandı.';reviewMode=false;backToTestBtn.style.display='none';}},1500);return;}totalQuestions++;const correct=ans===correctDirection;if(correct){score++;correctAnswers++;feedbackDiv.textContent=`✅ Doğru! Puan: ${score}`;playTone(880);drawCompass();}else{score--;wrongAnswers++;feedbackDiv.textContent=`❌ Yanlış. Doğru: ${correctDirection}. Puan: ${score}`;playTone(220);wrongAttempts.push({visibleLabels:[...visibleLabels],correct:correctDirection,angleOffset});drawCircle();drawLabels();drawHeli();answerButtons.style.display='none';continueBtn.style.display='inline-block';}scoreDiv.textContent=`Puan: ${score}`;});});
-    continueBtn.addEventListener('click',()=>{continueBtn.style.display='none';feedbackDiv.textContent='';drawCompass();});
-    reviewBtn.addEventListener('click',()=>{if(!wrongAttempts.length)return;reviewMode=true;reviewIndex=0;scoreDiv.textContent='Tekrar Modu';reviewBtn.style.display='none';backToTestBtn.style.display='inline-block';loadReviewQuestion();});
-    backToTestBtn.addEventListener('click',()=>{reviewMode=false;backToTestBtn.style.display='none';scoreDiv.textContent=`Puan: ${score}`;drawCompass();});
-    function loadReviewQuestion(){const obj=wrongAttempts[reviewIndex];visibleLabels=obj.visibleLabels;correctDirection=obj.correct;angleOffset=obj.angleOffset;drawCircle();drawLabels();drawHeli();answerButtons.style.display='none';setTimeout(()=>{drawCircle();drawHeli();answerButtons.style.display='grid';},2600);}    
-    saveHistoryBtn.addEventListener('click',()=>{const acc=totalQuestions?((correctAnswers/totalQuestions)*100).toFixed(1):0;const entry={date:new Date().toLocaleString('tr-TR'),total:totalQuestions,correct:correctAnswers,wrong:wrongAnswers,accuracy:acc};const hist=JSON.parse(localStorage.getItem('helicopterHistory')||'[]');hist.push(entry);localStorage.setItem('helicopterHistory',JSON.stringify(hist));renderHistory();alert('Kaydedildi');});
-    function renderHistory(){const hist=JSON.parse(localStorage.getItem('helicopterHistory')||'[]');historyUl.innerHTML='';hist.slice(-10).reverse().forEach(e=>{const li=document.createElement('li');li.textContent=`${e.date} - Toplam:${e.total}, Doğru:${e.correct}, Yanlış:${e.wrong}, Oran:${e.accuracy}%`;historyUl.append(li);} );historyList.style.display=hist.length?'block':'none';}
-    window.addEventListener('load',renderHistory);
+        answerButtons.style.display = 'grid';
+        questionStartTime = Date.now();
+      }, delay);
+    }
+    function updateTimer(){
+      const m = String(Math.floor(timeLeft/60)).padStart(2,'0');
+      const s = String(timeLeft%60).padStart(2,'0');
+      timerDiv.textContent = `Kalan Süre: ${m}:${s}`;
+      if(timeLeft<=0){
+        clearInterval(timerInterval);
+        sessionActive = false;
+        answerButtons.style.display = 'none';
+        feedbackDiv.textContent = `⏰ Süre doldu! Puanınız: ${score}`;
+        document.getElementById('totalQuestions').textContent = `Toplam Soru: ${totalQuestions}`;
+        document.getElementById('correctAnswers').textContent = `Doğru Sayısı: ${correctAnswers}`;
+        document.getElementById('wrongAnswers').textContent = `Yanlış Sayısı: ${wrongAnswers}`;
+        const acc = totalQuestions ? ((correctAnswers/totalQuestions)*100).toFixed(1) : 0;
+        document.getElementById('accuracyRate').textContent = `Doğruluk Oranı: ${acc}%`;
+        const avg = reactionTimes.length ? Math.round(reactionTimes.reduce((a,b)=>a+b)/reactionTimes.length) : 0;
+        document.getElementById('avgTime').textContent = `Ortalama Tepki Süresi: ${avg} ms`;
+        statsEl.style.display = 'block';
+        if(wrongAttempts.length) reviewBtn.style.display = 'inline-block';
+        saveHistoryBtn.style.display = 'inline-block';
+      }
+      timeLeft--;
+    }
+    startBtn.addEventListener('click', ()=>{
+      if(!sessionActive){
+        sessionActive = true;
+        score = 0; totalQuestions = 0; correctAnswers = 0; wrongAnswers = 0; wrongAttempts = [];
+        reviewMode = false; reviewIndex = 0; timeLeft = 90;
+        reactionTimes = [];
+        scoreDiv.textContent = `Puan: ${score}`;
+        feedbackDiv.textContent = '';
+        statsEl.style.display = 'none'; reviewBtn.style.display = 'none';
+        saveHistoryBtn.style.display = 'none'; historyList.style.display = 'none';
+        timerInterval = setInterval(updateTimer,1000);
+        drawCompass();
+      }
+    });
+    answerButtons.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(!sessionActive && !reviewMode) return;
+        if(!reviewMode && questionStartTime){
+          reactionTimes.push(Date.now() - questionStartTime);
+          questionStartTime = 0;
+        }
+        const ans = btn.dataset.dir;
+        const isReview = reviewMode;
+        if(isReview){
+          feedbackDiv.textContent = (ans===correctDirection)? '✅ Doğru!' : `❌ Yanlış. Doğru: ${correctDirection}`;
+          playTone(ans===correctDirection?880:220);
+          setTimeout(()=>{
+            reviewIndex++;
+            if(reviewIndex < wrongAttempts.length){
+              feedbackDiv.textContent = '';
+              loadReviewQuestion();
+            } else {
+              feedbackDiv.textContent = 'Tüm yanlışlar tekrarlandı.';
+              reviewMode = false;
+              backToTestBtn.style.display = 'none';
+            }
+          }, 1500);
+          return;
+        }
+        totalQuestions++;
+        const correct = (ans === correctDirection);
+        if(correct){
+          score++; correctAnswers++;
+          feedbackDiv.textContent = `✅ Doğru! Puan: ${score}`;
+          playTone(880);
+          drawCompass();
+        } else {
+          score--; wrongAnswers++;
+          feedbackDiv.textContent = `❌ Yanlış. Doğru: ${correctDirection}. Puan: ${score}`;
+          playTone(220);
+          wrongAttempts.push({ visibleLabels:[...visibleLabels], correct:correctDirection, angleOffset });
+          drawCircle(); drawLabels(); drawHeli();
+          answerButtons.style.display = 'none';
+          continueBtn.style.display = 'inline-block';
+        }
+        scoreDiv.textContent = `Puan: ${score}`;
+      });
+    });
+    continueBtn.addEventListener('click', ()=>{
+      continueBtn.style.display = 'none';
+      feedbackDiv.textContent = '';
+      drawCompass();
+    });
+    reviewBtn.addEventListener('click', ()=>{
+      if(!wrongAttempts.length) return;
+      reviewMode = true; reviewIndex = 0;
+      scoreDiv.textContent = 'Tekrar Modu';
+      reviewBtn.style.display = 'none'; backToTestBtn.style.display = 'inline-block';
+      loadReviewQuestion();
+    });
+    backToTestBtn.addEventListener('click', ()=>{
+      reviewMode = false;
+      backToTestBtn.style.display = 'none';
+      scoreDiv.textContent = `Puan: ${score}`;
+      drawCompass();
+    });
+    function loadReviewQuestion(){
+      const obj = wrongAttempts[reviewIndex];
+      visibleLabels = obj.visibleLabels;
+      correctDirection = obj.correct;
+      angleOffset = obj.angleOffset;
+      drawCircle(); drawLabels(); drawHeli();
+      answerButtons.style.display = 'none';
+      const delay = parseInt(document.getElementById('initialDelayInput').value) || 2600;
+      setTimeout(()=>{
+        drawCircle(); drawHeli();
+        answerButtons.style.display = 'grid';
+        questionStartTime = Date.now();
+      }, delay);
+    }
+    saveHistoryBtn.addEventListener('click', ()=>{
+      const acc = totalQuestions?((correctAnswers/totalQuestions)*100).toFixed(1):0;
+      const avg = reactionTimes.length?Math.round(reactionTimes.reduce((a,b)=>a+b)/reactionTimes.length):0;
+      const entry = { date: new Date().toLocaleString('tr-TR'), total:totalQuestions, correct:correctAnswers, wrong:wrongAnswers, accuracy:acc, avgTime:avg };
+      const hist = JSON.parse(localStorage.getItem('helicopterHistory')||'[]');
+      hist.push(entry);
+      localStorage.setItem('helicopterHistory',JSON.stringify(hist));
+      renderHistory();
+      alert('Kaydedildi');
+    });
+    function renderHistory(){
+      const hist = JSON.parse(localStorage.getItem('helicopterHistory')||'[]');
+      historyUl.innerHTML = '';
+      hist.slice(-10).reverse().forEach(e=>{
+        const li = document.createElement('li');
+        li.textContent = `${e.date} - Toplam:${e.total}, Doğru:${e.correct}, Yanlış:${e.wrong}, Oran:${e.accuracy}%, Ortalama Tepki:${e.avgTime} ms`;
+        historyUl.append(li);
+      });
+      historyList.style.display = hist.length?'block':'none';
+    }
+    window.addEventListener('load', renderHistory);
   </script>
 </body>
 </html>
+
