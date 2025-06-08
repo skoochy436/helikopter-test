@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Psikomotor Harf Testi</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; text-align: center; }
+    #settings { margin-bottom: 20px; }
+    .letter-container { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px; margin: 20px 0; }
+    .letter { font-size: 2rem; margin: 0 2px; }
+    .btn { padding: 8px 16px; margin: 8px; font-size: 1rem; border: 1px solid #000; background: none; cursor: pointer; }
+    #countdown { font-size: 1.2rem; margin-top: 10px; }
+    #question { margin: 20px 0; font-size: 1.2rem; white-space: pre-line; }
+    #feedback { font-size: 1.2rem; margin: 10px 0; font-weight: bold; }
+    #history { margin-top: 20px; display: none; }
+    #historyList { list-style: none; padding: 0; }
+    #historyList li { margin: 5px 0; }
+    @media (max-width: 600px) { .letter { font-size: 1.5rem; } .btn { padding: 6px 12px; font-size: 0.9rem; }}
+  </style>
+</head>
+<body>
+  <h1>Psikomotor Harf Testi</h1>
+  <div id="settings">
+    <label>Harf Gösterim Süresi (ms): <input type="number" id="displayTimeInput" value="4000" min="100" max="10000"></label>
+  </div>
+  <button id="startBtn" class="btn">Teste Başla</button>
+
+  <div id="test" style="display:none;">
+    <div id="countdown"></div>
+    <div id="letterDisplay" class="letter-container"></div>
+    <div id="question"></div>
+    <div id="answerButtons" style="display:none;">
+      <button id="yesBtn" class="btn">Evet</button>
+      <button id="noBtn" class="btn">Hayır</button>
+    </div>
+    <div id="feedback"></div>
+  </div>
+
+  <div id="summary" style="display:none; margin-top:20px;">
+    <h2>Sonuçlar</h2>
+    <p>Doğru: <span id="correctCount"></span> / <span id="totalCount"></span></p>
+    <p>Ortlama Tepki Süresi: <span id="avgTime"></span> ms</p>
+    <button id="restartBtn" class="btn">Tekrar Başlat</button>
+    <button id="historyBtn" class="btn">Geçmiş Skorlar</button>
+  </div>
+
+  <div id="history">
+    <h2>Geçmiş Skorlar</h2>
+    <ul id="historyList"></ul>
+  </div>
+
+  <script>
+    const alphabet = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    const stages = [5,6,7,8,9];
+    let currentStage = 0;
+    let originalLetters = [];
+    let queryLetters = [];
+    let trials = [];
+    let displayInterval, answerInterval, questionStart, displayTime = 4000;
+
+    const startBtn = document.getElementById('startBtn');
+    const testDiv = document.getElementById('test');
+    const countdownDiv = document.getElementById('countdown');
+    const letterDisplay = document.getElementById('letterDisplay');
+    const questionDiv = document.getElementById('question');
+    const answerButtons = document.getElementById('answerButtons');
+    const yesBtn = document.getElementById('yesBtn');
+    const noBtn = document.getElementById('noBtn');
+    const feedbackDiv = document.getElementById('feedback');
+    const summaryDiv = document.getElementById('summary');
+    const correctCountEl = document.getElementById('correctCount');
+    const totalCountEl = document.getElementById('totalCount');
+    const avgTimeEl = document.getElementById('avgTime');
+    const restartBtn = document.getElementById('restartBtn');
+    const historyBtn = document.getElementById('historyBtn');
+    const historyDiv = document.getElementById('history');
+    const historyList = document.getElementById('historyList');
+
+    startBtn.onclick = () => {
+      const val = parseInt(document.getElementById('displayTimeInput').value, 10);
+      displayTime = isNaN(val) ? 4000 : val;
+      trials = [];
+      currentStage = 0;
+      summaryDiv.style.display = 'none';
+      historyDiv.style.display = 'none';
+      startBtn.style.display = 'none';
+      runStage();
+    };
+
+    function runStage() {
+      clearInterval(displayInterval);
+      clearInterval(answerInterval);
+      countdownDiv.textContent = '';
+      feedbackDiv.textContent = '';
+
+      if (currentStage >= stages.length) {
+        if (trials.every(t => t.correct)) {
+          currentStage = 0;
+        } else {
+          return showSummary();
+        }
+      }
+
+      testDiv.style.display = 'block';
+      questionDiv.textContent = '';
+      answerButtons.style.display = 'none';
+      letterDisplay.innerHTML = '';
+
+      const pool = [...alphabet]; shuffle(pool);
+      originalLetters = pool.slice(0, stages[currentStage]);
+      originalLetters.forEach(l => {
+        const d = document.createElement('div'); d.className = 'letter'; d.textContent = l; letterDisplay.appendChild(d);
+      });
+
+      let remaining = Math.ceil(displayTime / 1000);
+      countdownDiv.textContent = `Gösterim: ${remaining}s`;
+      displayInterval = setInterval(() => { remaining--; if (remaining >= 0) countdownDiv.textContent = `Gösterim: ${remaining}s`; }, 1000);
+
+      setTimeout(() => {
+        clearInterval(displayInterval); countdownDiv.textContent = ''; letterDisplay.innerHTML = '';
+
+        const count = stages[currentStage] <= 6 ? 2 : 3;
+        const isMatch = Math.random() < 0.5;
+        queryLetters = [];
+        if (isMatch) {
+          const sample = [...originalLetters]; shuffle(sample); queryLetters = sample.slice(0, count);
+        } else {
+          const nonPool = alphabet.filter(l => !originalLetters.includes(l)); shuffle(nonPool); queryLetters = nonPool.slice(0, count);
+        }
+
+        questionDiv.textContent = `Aşağıdaki ${count} harf önceki ${stages[currentStage]} arasında mı?
+[ ${queryLetters.join(', ')} ]`;
+        answerButtons.style.display = 'block';
+        questionStart = Date.now();
+
+        let ansRem = 3;
+        countdownDiv.textContent = `Cevap: ${ansRem}s`;
+        answerInterval = setInterval(() => { ansRem--; if (ansRem >= 0) countdownDiv.textContent = `Cevap: ${ansRem}s`; }, 1000);
+        setTimeout(() => { clearInterval(answerInterval); if (answerButtons.style.display === 'block') timeoutAnswer(); }, 3000);
+      }, displayTime);
+    }
+
+    function timeoutAnswer() {
+      feedbackDiv.textContent = 'Zaman doldu!'; feedbackDiv.style.color = 'orange';
+      trials.push({ correct: false, time: displayTime });
+      answerButtons.style.display = 'none';
+      const correctCount = trials.filter(t => t.correct).length;
+      if (correctCount >= 5) setTimeout(showSummary, 1000);
+      else { currentStage++; setTimeout(runStage, 1000); }
+    }
+
+    function handleAnswer(isYes) {
+      clearInterval(displayInterval);
+      clearInterval(answerInterval);
+      countdownDiv.textContent = '';
+      const reaction = Date.now() - questionStart;
+      const allPresent = queryLetters.every(l => originalLetters.includes(l));
+      const correct = (isYes && allPresent) || (!isYes && !allPresent);
+      trials.push({ correct, time: reaction });
+      feedbackDiv.textContent = correct ? 'Doğru!' : 'Yanlış!'; feedbackDiv.style.color = correct ? 'green' : 'red';
+      answerButtons.style.display = 'none';
+      const correctCount = trials.filter(t => t.correct).length;
+      if (!correct && correctCount >= 5) {
+        setTimeout(showSummary, 1000);
+      } else {
+        currentStage++;
+        setTimeout(runStage, 1000);
+      }
+    }
+
+    yesBtn.onclick = () => handleAnswer(true);
+    noBtn.onclick = () => handleAnswer(false);
+
+    function showSummary() {
+      testDiv.style.display = 'none';
+      const correctCount = trials.filter(t => t.correct).length;
+      const total = trials.length;
+      const avgTime = Math.round(trials.reduce((sum, t) => sum + t.time, 0) / total);
+      correctCountEl.textContent = correctCount;
+      totalCountEl.textContent = total;
+      avgTimeEl.textContent = avgTime;
+      const history = JSON.parse(localStorage.getItem('history') || '[]');
+      history.push({ date: new Date().toLocaleString(), correct: correctCount, total, avgTime });
+      localStorage.setItem('history', JSON.stringify(history));
+      summaryDiv.style.display = 'block';
+    }
+
+    historyBtn.onclick = () => {
+      const history = JSON.parse(localStorage.getItem('history') || '[]');
+      historyList.innerHTML = '';
+      history.forEach(h => {
+        const li = document.createElement('li');
+        li.textContent = `${h.date} - ${h.correct}/${h.total} (${h.avgTime} ms)`;
+        historyList.appendChild(li);
+      });
+      historyDiv.style.display = 'block';
+    };
+
+    restartBtn.onclick = () => { startBtn.style.display = 'inline-block'; summaryDiv.style.display = 'none'; historyDiv.style.display = 'none'; };
+  </script>
+</body>
+</html>
